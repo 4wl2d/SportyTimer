@@ -1,47 +1,45 @@
 package ind.wldd.sportytimer.domain.usecase
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import android.os.SystemClock
+import ind.wldd.sportytimer.domain.model.TimerState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOn
 
-class CountdownUseCase {
-    private var updateJob: Job? = null
-    private val scope = CoroutineScope(SupervisorJob())
+fun countdownSecondsFlow(
+    totalSeconds: Int,
+    nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+): Flow<TimerState> =
+    flow {
+        require(totalSeconds >= 0) { "totalSeconds must be >= 0" }
 
-    fun execute(initialValue: Int): StateFlow<Int> {
-        updateJob?.cancel()
+        val endAtMs = nowMs() + totalSeconds.toLong() * 1000L
 
-        val stateFlow = MutableStateFlow(initialValue)
+        var lastEmitted = Int.MIN_VALUE
 
-        updateJob =
-            scope.launch {
-                flow {
-                    var secondsRemaining = initialValue
+        while (true) {
+            val now = nowMs()
+            val remainingMs = (endAtMs - now).coerceAtLeast(0L)
+            val remainingSecLong = (remainingMs + 999L) / 1000L
+            val remainingSec = remainingSecLong.toInt()
 
-                    emit(initialValue)
-
-                    while (secondsRemaining > 0) {
-                        delay(1000)
-                        secondsRemaining--
-                        emit(secondsRemaining)
-                    }
-                }.collect { value ->
-                    stateFlow.value = value
-                }
+            if (remainingSec != lastEmitted) {
+                emit(
+                    TimerState(
+                        currentValue = remainingSec,
+                        isRunning = remainingSec > 0,
+                        isFinished = remainingSec == 0
+                    )
+                )
+                lastEmitted = remainingSec
             }
 
-        return stateFlow.asStateFlow()
-    }
+            if (remainingMs == 0L) break
 
-    fun cancel() {
-        updateJob?.cancel()
-        scope.cancel()
-    }
-}
+            val nextBoundary = endAtMs - (remainingSecLong - 1L) * 1000L
+            val delayMs = (nextBoundary - now).coerceAtLeast(1L)
+            delay(delayMs)
+        }
+    }.flowOn(Dispatchers.Default)

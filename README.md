@@ -1,88 +1,101 @@
 # Countdown Timer – Compose Task
 
-## Автор
-4wl2d - Томилов Владислав Игоревич
+## Author
+4wl2d - Tomilov Vladislav Igorevich
 
 ---
 
-# Моё решение:
+# My Solution:
 ---
 
-## Архитектура
+## Architecture
 
-Проект следует принципам **Clean Architecture** с разделением на слои:
+The project follows **Clean Architecture** principles with layer separation:
 
-### Структура проекта
+### Project Structure
 
 ```
 app/src/main/java/ind/wldd/sportytimer/
-├── domain/                    # Доменный слой (бизнес-логика)
+├── domain/                    # Domain layer (business logic)
 │   ├── model/
-│   │   └── TimerState.kt     # Модель состояния таймера
+│   │   └── TimerState.kt     # Timer state model (domain layer)
 │   └── usecase/
-│       └── CountdownUseCase.kt # Use case для обратного отсчета
-├── presentation/              # Слой представления
+│       └── CountdownUseCase.kt # Countdown use case function
+├── presentation/              # Presentation layer
 │   ├── model/
-│   │   └── TimerUiState.kt   # UI-модель состояния
+│   │   └── TimerUiState.kt   # UI state model
 │   ├── viewmodel/
-│   │   └── TimerViewModel.kt # ViewModel для управления состоянием
+│   │   └── TimerViewModel.kt # ViewModel for state management
 │   └── ui/
-│       └── TimerScreen.kt    # Compose UI компоненты
-└── MainActivity.kt            # Точка входа приложения
+│       └── TimerScreen.kt    # Compose UI components
+└── MainActivity.kt            # Application entry point
 ```
 
-### Архитектурные слои
+### Architectural Layers
 
-1. **Domain Layer (Доменный слой)**
-   - Содержит бизнес-логику приложения
-   - Независим от Android-фреймворков
-   - `CountdownUseCase` — инкапсулирует логику обратного отсчета
-   - `TimerState` — модель данных домена
+1. **Domain Layer**
+   - Contains application business logic
+   - Independent of Android frameworks
+   - `countdownSecondsFlow()` — encapsulates countdown logic as a top-level function
+   - `TimerState` — domain data model returned by the use case, converted to `TimerUiState` in the presentation layer
 
-2. **Presentation Layer (Слой представления)**
-   - Управляет UI и взаимодействием с пользователем
-   - `TimerViewModel` — управляет состоянием UI через StateFlow
-   - `TimerScreen` — Compose UI компоненты
-   - `TimerUiState` — модель состояния для UI
+2. **Presentation Layer**
+   - Manages UI and user interaction
+   - `TimerViewModel` — manages UI state through StateFlow, converts `TimerState` to `TimerUiState` via `toUiState()` extension function
+   - `TimerScreen` — Compose UI components with custom drawing implementation
+   - `TimerUiState` — state model for UI (presentation layer)
 
 3. **MainActivity**
-   - Точка входа приложения
-   - Настраивает Compose и тему
-   - Использует Edge-to-Edge для современного дизайна
+   - Application entry point
+   - Sets up Compose and theme
+   - Uses Edge-to-Edge for modern design
 
 ---
 
-## Логика работы приложения
+## Application Logic
 
-### Основной поток работы
+### Main Workflow
 
-1. **Инициализация**
-   - При запуске `MainActivity` создается `TimerViewModel`
-   - `TimerViewModel` автоматически запускает таймер в `init` блоке
-   - Таймер начинает отсчет с 10 секунд
+1. **Initialization**
+   - When `MainActivity` starts, `TimerViewModel` is created
+   - `TimerViewModel` automatically starts the timer in the `init` block by calling `startTimer()`
+   - The timer starts counting down from 10 seconds (default parameter)
 
-2. **Обратный отсчет**
-   - `CountdownUseCase.execute(10)` создает Flow, который:
-     - Эмитит начальное значение (10)
-     - Каждую секунду уменьшает значение на 1
-     - Эмитит новое значение до достижения 0
-   - Используется `delay(1000)`(пробовал с ticker flow api, решил не оверинженерить)
+2. **Countdown**
+   - `countdownSecondsFlow(totalSeconds)` creates a Flow that:
+     - Uses `SystemClock.elapsedRealtime()` for precise time calculations
+     - Calculates remaining time based on actual elapsed time, ensuring accuracy even if the app is paused/resumed
+     - Prevents duplicate emissions by tracking `lastEmitted` value
+     - Calculates delays to the next second boundary for efficiency (only delays until the next second change)
+     - Emits `TimerState` objects with `currentValue`, `isRunning`, and `isFinished` properties
+     - Emits the initial value (totalSeconds)
+     - Emits updated remaining seconds as time progresses
+     - Emits 0 when the countdown completes
+     - Runs on `Dispatchers.Default` for non-blocking execution
+   - The implementation uses time-based calculations rather than simple delays to maintain accuracy
 
-3. **Управление состоянием**
-   - `TimerViewModel` подписывается на Flow через `collect`
-   - Обновляет `TimerUiState` при каждом новом значении
-   - Отслеживает состояние: `isRunning` и `isFinished`
+3. **State Management**
+   - `TimerViewModel` subscribes to the Flow through `collect` in `viewModelScope`
+   - Converts `TimerState` (domain) to `TimerUiState` (presentation) using the `toUiState()` extension function
+   - Updates `TimerUiState` on each new value from the Flow
+   - Tracks state: `isRunning` and `isFinished`
+   - The `startTimer(seconds: Int = 10)` function can be called with different values and prevents restart if already running
+   - Cancels previous countdown job when starting a new timer
 
-4. **Отображение**
-   - `TimerScreen` наблюдает за `uiState` через `collectAsStateWithLifecycle`
-   - UI автоматически обновляется при изменении состояния
-   - Отображается текущее значение таймера крупным шрифтом
+4. **Display**
+   - `TimerScreen` uses `LaunchedEffect` to collect from `viewModel.uiState` Flow
+   - Stores the current timer value in a `remember { mutableIntStateOf(0) }` state
+   - UI automatically updates when state changes
+   - Uses custom drawing with `drawWithContent` modifier for precise text rendering
+   - Renders text using native Canvas (`drawContext.canvas.nativeCanvas.drawText()`) for pixel-perfect centering
+   - Text is styled using Material theme typography (`displayLarge`) and colors
+   - Text is centered both horizontally and vertically using precise Paint measurements
 
 ---
 
-## Используемые технологии и библиотеки
+## Technologies and Libraries Used
 
-### Основные технологии
+### Core Technologies
 
 1. **Jetpack Compose** (`compose-bom: 2026.01.00`)
 
@@ -92,7 +105,7 @@ app/src/main/java/ind/wldd/sportytimer/
 
 4. **Lifecycle Runtime Compose** (`lifecycle-runtime-compose: 2.10.0`)
 
-### Версии и конфигурация
+### Versions and Configuration
 
 - **Min SDK**: 26 (Android 8.0)
 - **Target SDK**: 36
@@ -102,71 +115,57 @@ app/src/main/java/ind/wldd/sportytimer/
 
 ---
 
-## Что можно было использовать, но не использовал
+## What Could Have Been Used But Wasn't
 
 ### 1. WorkManager
 
-**Почему не использовал:**
-- Таймер работает только когда приложение активно
-- Нет требований к фоновой работе
-- Использование корутин в ViewModel достаточно для задачи
+**Why it wasn't used:**
+- Timer only works when the application is active
+- No background work requirements
+- Using coroutines in ViewModel is sufficient for the task
 
-**Когда стоило бы использовать:**
-- Если нужен таймер, работающий в фоне
-- Если требуется уведомление по завершении
-- Если нужно продолжать отсчет при закрытии приложения
+**When it should be used:**
+- If a timer is needed that works in the background
+- If a notification is required upon completion
+- If the countdown needs to continue when the app is closed
 
-### 2. Compose Runtime для таймера (LaunchedEffect, DisposableEffect)
+### 2. RxJava / ReactiveX
 
-**Почему не использовал:**
-- Таймер реализован на уровне ViewModel, что обеспечивает лучшую тестируемость
-- Логика таймера отделена от UI, что соответствует Clean Architecture
-- ViewModel переживает изменения конфигурации, а Compose-эффекты могут перезапускаться
-- Использование `LaunchedEffect` в UI-слое смешало бы бизнес-логику с представлением
+**Why it wasn't used:**
+- Kotlin Coroutines and Flow have native support in Kotlin
+- Fewer dependencies: RxJava requires an additional library
+- Simpler syntax for this task
+- Better integration with Compose through Flow collection in `LaunchedEffect`
+- Lower learning curve for Kotlin developers
 
-**Когда стоило бы использовать:**
-- Для простых UI-анимаций и локальных эффектов
-- Если таймер нужен только для визуального отображения без бизнес-логики
-- Для одноразовых операций, привязанных к жизненному циклу composable
-- Пример: `LaunchedEffect(Unit) { while (active) { delay(1000); /* обновление */ } }`
+**When it should be used:**
+- In projects where RxJava is already used
+- When complex transformation operators are needed (combineLatest, zip, etc.)
+- When working with legacy RxJava code
+- If the team is already familiar with ReactiveX
 
-### 3. RxJava / ReactiveX
+### 3. MVI Frameworks (FlowMVI, Orbit MVI, MVIKotlin)
 
-**Почему не использовал:**
-- Kotlin Coroutines и Flow — нативная поддержка в Kotlin
-- Меньше зависимостей: RxJava требует дополнительной библиотеки
-- Более простой синтаксис для данной задачи
-- Лучшая интеграция с Compose через `collectAsStateWithLifecycle`
-- Меньше кривая обучения для Kotlin-разработчиков
+**Why it wasn't used:**
+- Task simplicity doesn't require complex state architecture
+- ViewModel + StateFlow is sufficient for state management
+- MVI adds an additional abstraction layer (Intent/Action → State)
+- Increases code amount and complexity for a simple timer
 
-**Когда стоило бы использовать:**
-- В проектах, где уже используется RxJava
-- При необходимости сложных операторов трансформации (combineLatest, zip и т.д.)
-- При работе с legacy-кодом на RxJava
-- Если команда уже знакома с ReactiveX
+**When it should be used:**
+- In complex applications with multiple screens and states
+- When predictable state changes are needed (unidirectional data flow)
+- When working in a team where MVI is the standard
+- If time-travel debugging or logging of all actions is required
 
-### 4. MVI-фреймворки (FlowMVI, Orbit MVI, MVIKotlin)
+**What MVI would provide:**
+- Clear separation into Intent (actions) → State (state)
+- Predictable data flow: all changes through one channel
+- Easier to track the source of state changes
+- Example structure: `TimerIntent.Start → TimerState.Running → TimerIntent.Tick → TimerState.Updated`
 
-**Почему не использовал:**
-- Простота задачи не требует сложной архитектуры состояний
-- ViewModel + StateFlow достаточно для управления состоянием
-- MVI добавляет дополнительный слой абстракции (Intent/Action → State)
-- Увеличивает количество кода и сложность для простого таймера
-
-**Когда стоило бы использовать:**
-- В сложных приложениях с множеством экранов и состояний
-- Когда нужна предсказуемость изменений состояния (unidirectional data flow)
-- При работе в команде, где MVI является стандартом
-- Если требуется time-travel debugging или логирование всех действий
-
-**Что дал бы MVI:**
-- Четкое разделение на Intent (действия) → State (состояние)
-- Предсказуемый поток данных: все изменения через один канал
-- Легче отслеживать источник изменений состояния
-- Пример структуры: `TimerIntent.Start → TimerState.Running → TimerIntent.Tick → TimerState.Updated`
-
-**Почему текущий подход достаточен:**
-- StateFlow уже обеспечивает реактивное обновление UI
-- ViewModel инкапсулирует логику изменения состояния
-- Меньше boilerplate-кода
-- Проще понять и поддерживать для простых случаев
+**Why the current approach is sufficient:**
+- StateFlow already provides reactive UI updates
+- ViewModel encapsulates state change logic
+- Less boilerplate code
+- Easier to understand and maintain for simple cases

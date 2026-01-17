@@ -2,5 +2,6 @@ package ind.wldd.sportytimer.domain.model
 
 data class TimerState(
     val currentValue: Int,
-    val isRunning: Boolean
+    val isRunning: Boolean,
+    val isFinished: Boolean
 )
