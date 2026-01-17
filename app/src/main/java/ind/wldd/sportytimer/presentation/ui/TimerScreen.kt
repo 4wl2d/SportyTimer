@@ -1,6 +1,7 @@
 package ind.wldd.sportytimer.presentation.ui
 
 import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -60,12 +61,12 @@ fun TimerContent(
                 color = textColor.toArgb()
                 textSize = with(density) { textStyle.fontSize.toPx() }
                 typeface =
-                    android.graphics.Typeface.create(
-                        android.graphics.Typeface.DEFAULT,
+                    Typeface.create(
+                        Typeface.DEFAULT,
                         when (textStyle.fontWeight) {
-                            FontWeight.Bold -> android.graphics.Typeface.BOLD
-                            FontWeight.Normal -> android.graphics.Typeface.NORMAL
-                            else -> android.graphics.Typeface.NORMAL
+                            FontWeight.Bold -> Typeface.BOLD
+                            FontWeight.Normal -> Typeface.NORMAL
+                            else -> Typeface.NORMAL
                         },
                     )
             }
